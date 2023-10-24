@@ -2,27 +2,17 @@ package main
 
 import (
 	"fmt"
+	"github.com/gorilla/mux"
 	"net/http"
 )
 
-func hello(w http.ResponseWriter, req *http.Request) {
-
-	fmt.Fprintf(w, "hello\n")
-}
-
-func headers(w http.ResponseWriter, req *http.Request) {
-
-	for name, headers := range req.Header {
-		for _, h := range headers {
-			fmt.Fprintf(w, "%v: %v\n", name, h)
-		}
-	}
-}
-
 func main() {
+	gorillamuxRouter := mux.NewRouter()
+	gorillamuxRouter.HandleFunc("/vlockwoo/status", status).Methods(http.MethodGet)
 
-	http.HandleFunc("/hello", hello)
-	http.HandleFunc("/headers", headers)
+	http.ListenAndServe(":8090", gorillamuxRouter)
+}
 
-	http.ListenAndServe(":8090", nil)
+func status(w http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(w, "hello this is me flying gorilla\n")
 }
