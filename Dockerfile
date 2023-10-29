@@ -15,8 +15,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -o main .
 FROM alpine:latest
 
 # Add support for HTTPS
-RUN apk update && \
-    apk upgrade && \
+RUN apk update; \
+    apk upgrade; \
     apk add ca-certificates
 
 WORKDIR /root/
