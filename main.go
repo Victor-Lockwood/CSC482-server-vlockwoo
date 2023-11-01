@@ -4,32 +4,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	loggly "github.com/jamespearly/loggly"
+	"github.com/jamespearly/loggly"
 	"net/http"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
-
-type statusResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-type EndpointResponse struct {
-	SystemTime time.Time `json:"systemtime"`
-	Status     int       `json:"status"`
-}
 
 func main() {
 	gorillamuxRouter := mux.NewRouter()
 
 	gorillamuxRouter.HandleFunc("/vlockwoo/status", status).Methods(http.MethodGet)
+	gorillamuxRouter.HandleFunc("/vlockwoo/all", all).Methods(http.MethodGet)
+	gorillamuxRouter.HandleFunc("/vlockwoo/search", search).Methods(http.MethodGet)
+
 	gorillamuxRouter.NotFoundHandler = http.HandlerFunc(notFound)
 	gorillamuxRouter.MethodNotAllowedHandler = http.HandlerFunc(notAllowed)
 
 	gorillamuxRouter.Use(Middleware(gorillamuxRouter))
 
-	http.ListenAndServe(":8090", gorillamuxRouter)
+	http.ListenAndServe(":8080", gorillamuxRouter)
 }
+
+// *** ENDPOINTS ***
 
 func status(w http.ResponseWriter, req *http.Request) {
 	endpointResponse := new(EndpointResponse)
@@ -40,6 +39,43 @@ func status(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(endpointResponse)
 	return
 }
+
+func all(w http.ResponseWriter, req *http.Request) {
+	// Initialize a session that the SDK will use to load
+	// credentials from the shared credentials file ~/.aws/credentials
+	// and region from the shared configuration file ~/.aws/config.
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+
+	tableName := "vlockwoo-satellites"
+
+	sess.Config.Region = aws.String("us-east-1")
+	// Create DynamoDB client
+	svc := dynamodb.New(sess)
+
+	input := dynamodb.ScanInput{TableName: aws.String(tableName)}
+	output, err := svc.Scan(&input)
+
+	if err != nil {
+		fmt.Printf("Got error")
+	}
+
+	response := AllResponse{
+		TableName:   tableName,
+		RecordCount: *output.Count,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+	return
+}
+
+func search(w http.ResponseWriter, req *http.Request) {
+
+}
+
+// *** 404 AND 405 HANDLERS ***
 
 func notFound(w http.ResponseWriter, req *http.Request) {
 	endpointResponse := new(EndpointResponse)
@@ -70,6 +106,13 @@ func notAllowed(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(endpointResponse)
 	return
+}
+
+// *** MIDDLEWARE ***
+
+type statusResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
 }
 
 func NewStatusResponseWriter(responseWriter http.ResponseWriter) *statusResponseWriter {
