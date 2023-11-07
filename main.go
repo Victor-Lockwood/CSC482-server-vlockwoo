@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jamespearly/loggly"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -94,7 +95,38 @@ func all(w http.ResponseWriter, req *http.Request) {
 }
 
 func search(w http.ResponseWriter, req *http.Request) {
+	//puts query list into a map
+	query := req.URL.Query()
 
+	//check number of parameters
+	queryLen := len(query)
+	fmt.Printf("\tLENGTH:%d\n", queryLen)
+
+	//Check parameter names
+	fmt.Printf("\t%+v\n", query)
+
+	test1, present := query["test1"]
+	fmt.Printf("\ttest1 len %d\n", len(test1))
+
+	if !present || len(test1[0]) == 0 {
+		fmt.Println("\ttest1 not present\n")
+		//You can return a 400 right here
+	}
+
+	//test1 should be an int
+	test1Val, err := strconv.Atoi(test1[0])
+
+	if err != nil {
+		fmt.Println("\ttest1 is not an int - 400")
+	} else {
+		fmt.Printf("\ttest1 vale us %d\n", test1Val)
+	}
+
+	// Check that all expected vals make sense
+
+	//Check for only alpha numeric
+	//re := regexp.MustCompile("^[a-zA-Z]+$")
+	//fmt.Printf("\ttest2 REGEX TEST: %v\n", re.MatchString(test2[0]))
 }
 
 // *** 404 AND 405 HANDLERS ***
