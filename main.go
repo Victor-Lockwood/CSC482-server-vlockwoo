@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/expression"
 	"github.com/gorilla/mux"
 	"github.com/jamespearly/loggly"
 	"net/http"
@@ -94,39 +95,157 @@ func all(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
+// Search for items based on either:
+// eclipsed 	- Whether the space station is currently eclipsed relative to Rice Creek
+// timestamp 	- A known timestamp
+// Most other attributes are very specific (eg. azimuth) or currently unchanging (eg. satid).
 func search(w http.ResponseWriter, req *http.Request) {
 	//puts query list into a map
 	query := req.URL.Query()
 
 	//check number of parameters
 	queryLen := len(query)
-	fmt.Printf("\tLENGTH:%d\n", queryLen)
 
-	//Check parameter names
-	fmt.Printf("\t%+v\n", query)
+	if queryLen == 0 {
+		endpointResponse := EndpointResponse{SystemTime: time.Now(), Status: http.StatusBadRequest}
 
-	test1, present := query["test1"]
-	fmt.Printf("\ttest1 len %d\n", len(test1))
+		start := time.Now()
+		sw := NewStatusResponseWriter(w)
+		sw.WriteHeader(http.StatusBadRequest)
 
-	if !present || len(test1[0]) == 0 {
-		fmt.Println("\ttest1 not present\n")
-		//You can return a 400 right here
+		logRequestToLoggly(sw, req, start)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(endpointResponse)
+		return
 	}
 
-	//test1 should be an int
-	test1Val, err := strconv.Atoi(test1[0])
+	eclipsed, present := query["eclipsed"]
 
-	if err != nil {
-		fmt.Println("\ttest1 is not an int - 400")
-	} else {
-		fmt.Printf("\ttest1 vale us %d\n", test1Val)
+	if present && len(eclipsed[0]) == 0 {
+		fmt.Println("\teclipsed specified but not present\n")
+
+		endpointResponse := EndpointResponse{SystemTime: time.Now(), Status: http.StatusBadRequest}
+
+		start := time.Now()
+		sw := NewStatusResponseWriter(w)
+		sw.WriteHeader(http.StatusBadRequest)
+
+		logRequestToLoggly(sw, req, start)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(endpointResponse)
+		return
+	} else if present {
+		isEclipsed, err := strconv.ParseBool(eclipsed[0])
+
+		if err != nil {
+			fmt.Println("\teclipsed is not a bool - 400")
+
+			endpointResponse := new(EndpointResponse)
+			endpointResponse.SystemTime = time.Now()
+			endpointResponse.Status = http.StatusBadRequest
+
+			start := time.Now()
+			sw := NewStatusResponseWriter(w)
+			sw.WriteHeader(http.StatusBadRequest)
+
+			logRequestToLoggly(sw, req, start)
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(endpointResponse)
+			return
+		} else {
+			sess := session.Must(session.NewSessionWithOptions(session.Options{
+				SharedConfigState: session.SharedConfigEnable,
+			}))
+
+			tableName := "vlockwoo-satellites"
+
+			sess.Config.Region = aws.String("us-east-1")
+			// Create DynamoDB client
+			svc := dynamodb.New(sess)
+
+			filt := expression.Name("eclipsed").Equal(expression.Value(isEclipsed))
+			expr, _ := expression.NewBuilder().WithFilter(filt).Build()
+
+			params := &dynamodb.ScanInput{
+				TableName:                 aws.String(tableName),
+				ExpressionAttributeNames:  expr.Names(),
+				ExpressionAttributeValues: expr.Values(),
+				FilterExpression:          expr.Filter(),
+			}
+
+			output, _ := svc.Scan(params)
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(output.Items)
+			return
+		}
 	}
 
-	// Check that all expected vals make sense
+	//Searching by Timestamp
+	timestamp, present := query["timestamp"]
 
-	//Check for only alpha numeric
-	//re := regexp.MustCompile("^[a-zA-Z]+$")
-	//fmt.Printf("\ttest2 REGEX TEST: %v\n", re.MatchString(test2[0]))
+	if present && len(timestamp[0]) == 0 {
+		endpointResponse := EndpointResponse{SystemTime: time.Now(), Status: http.StatusBadRequest}
+
+		start := time.Now()
+		sw := NewStatusResponseWriter(w)
+		sw.WriteHeader(http.StatusBadRequest)
+
+		logRequestToLoggly(sw, req, start)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(endpointResponse)
+		return
+	} else if present {
+		specifiedTimestamp, err := strconv.Atoi(timestamp[0])
+
+		if err != nil || !(specifiedTimestamp > 0) {
+			fmt.Println("\ttimestamp is not an int/not greater than 0 - 400")
+
+			endpointResponse := new(EndpointResponse)
+			endpointResponse.SystemTime = time.Now()
+			endpointResponse.Status = http.StatusBadRequest
+
+			start := time.Now()
+			sw := NewStatusResponseWriter(w)
+			sw.WriteHeader(http.StatusBadRequest)
+
+			logRequestToLoggly(sw, req, start)
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(endpointResponse)
+			return
+		} else {
+			sess := session.Must(session.NewSessionWithOptions(session.Options{
+				SharedConfigState: session.SharedConfigEnable,
+			}))
+
+			tableName := "vlockwoo-satellites"
+
+			sess.Config.Region = aws.String("us-east-1")
+			// Create DynamoDB client
+			svc := dynamodb.New(sess)
+
+			filt := expression.Name("timestamp").Equal(expression.Value(specifiedTimestamp))
+			expr, _ := expression.NewBuilder().WithFilter(filt).Build()
+
+			params := &dynamodb.ScanInput{
+				TableName:                 aws.String(tableName),
+				ExpressionAttributeNames:  expr.Names(),
+				ExpressionAttributeValues: expr.Values(),
+				FilterExpression:          expr.Filter(),
+			}
+
+			output, _ := svc.Scan(params)
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(output.Items)
+			return
+		}
+	}
 }
 
 // *** 404 AND 405 HANDLERS ***
