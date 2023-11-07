@@ -3,14 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/gorilla/mux"
 	"github.com/jamespearly/loggly"
 	"net/http"
 	"time"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 func main() {
@@ -31,16 +30,6 @@ func main() {
 // *** ENDPOINTS ***
 
 func status(w http.ResponseWriter, req *http.Request) {
-	endpointResponse := new(EndpointResponse)
-	endpointResponse.SystemTime = time.Now()
-	endpointResponse.Status = http.StatusOK
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(endpointResponse)
-	return
-}
-
-func all(w http.ResponseWriter, req *http.Request) {
 	// Initialize a session that the SDK will use to load
 	// credentials from the shared credentials file ~/.aws/credentials
 	// and region from the shared configuration file ~/.aws/config.
@@ -68,6 +57,39 @@ func all(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+	return
+}
+
+func all(w http.ResponseWriter, req *http.Request) {
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+
+	tableName := "vlockwoo-satellites"
+
+	sess.Config.Region = aws.String("us-east-1")
+	// Create DynamoDB client
+	svc := dynamodb.New(sess)
+
+	input := dynamodb.ScanInput{TableName: aws.String(tableName)}
+	output, _ := svc.Scan(&input)
+
+	finalOutput := output.Items
+
+	//TODO: I don't have enough data to test this and I'm not comfortable pushing this uncommented until I do.  Currently there are 54 entries in the DB and I don't want to push my limits just yet.
+	//for {
+	//	if output.LastEvaluatedKey != nil {
+	//		input := dynamodb.ScanInput{TableName: aws.String(tableName), ExclusiveStartKey: output.LastEvaluatedKey}
+	//		output, _ := svc.Scan(&input)
+	//
+	//		finalOutput = append(finalOutput, output.Items...)
+	//	} else {
+	//		break
+	//	}
+	//}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(finalOutput)
 	return
 }
 
