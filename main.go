@@ -45,8 +45,8 @@ func status(w http.ResponseWriter, req *http.Request) {
 	// Create DynamoDB client
 	svc := dynamodb.New(sess)
 
-	input := dynamodb.ScanInput{TableName: aws.String(tableName)}
-	output, err := svc.Scan(&input)
+	input := dynamodb.DescribeTableInput{TableName: aws.String(tableName)}
+	output, err := svc.DescribeTable(&input)
 
 	if err != nil {
 		fmt.Printf("Got error")
@@ -54,7 +54,7 @@ func status(w http.ResponseWriter, req *http.Request) {
 
 	response := AllResponse{
 		TableName:   tableName,
-		RecordCount: *output.Count,
+		RecordCount: *output.Table.ItemCount,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
